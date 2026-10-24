@@ -721,7 +721,7 @@ async function consultarSpeeroAPI(page = 1) {
 
     try {
         const res = await apiFetch(
-            `/api/productos/buscar-externo?q=${encodeURIComponent(q)}&page=${currentPage}`
+            `/api/productos/buscar-externo?q=${encodeURIComponent(q)}&page=${currentPage}&locale=en`
         );
         const items = res.results || res.resultados || [];
         const totalItems = Number(res.total || items.length);
@@ -753,13 +753,12 @@ async function consultarSpeeroAPI(page = 1) {
                         item.price && typeof item.price === "object"
                             ? item.price.currency || "SAR"
                             : item.moneda || "SAR";
-                    const displayNameEs = item.name_es || item.name || item.nombre || oemCode;
-                    const originalName = item.name_original || "";
+                    const displayName = item.name || item.nombre || oemCode;
 
                     const safeItemJson = JSON.stringify({
                         oem: oemCode,
-                        name: displayNameEs,
-                        nombre: `${displayNameEs} [OEM: ${oemCode}]`,
+                        name: displayName,
+                        nombre: `${displayName} [OEM: ${oemCode}]`,
                         image: item.image || item.url_imagen || "",
                         url: item.url || "",
                         grade: item.grade || "aftermarket",
@@ -780,16 +779,11 @@ async function consultarSpeeroAPI(page = 1) {
                                     alt="OEM ${escapeHtml(oemCode)}"
                                     class="product-thumb"
                                     data-zoom-src="${escapeHtml(imgUrl)}"
-                                    data-zoom-caption="${escapeHtml(displayNameEs)} — OEM: ${escapeHtml(oemCode)}"
+                                    data-zoom-caption="${escapeHtml(displayName)} — OEM: ${escapeHtml(oemCode)}"
                                     onerror="this.src='${fallbackSvg}'"
                                 />
                                 <div>
-                                    <div style="font-weight:500;">${escapeHtml(displayNameEs)}</div>
-                                    ${
-                                        originalName && originalName !== displayNameEs
-                                            ? `<div style="font-size:11px; color:var(--text-muted);">${escapeHtml(originalName)}</div>`
-                                            : ""
-                                    }
+                                    <div style="font-weight:500;">${escapeHtml(displayName)}</div>
                                     ${
                                         item.url
                                             ? `<a href="${escapeHtml(item.url)}" target="_blank" rel="noopener noreferrer" class="mono" style="font-size:11px; color:var(--accent); text-decoration:none;">Ver ficha en Speero ↗</a>`
