@@ -1031,26 +1031,54 @@ window.rechazarSolicitud = async function (idSolicitud) {
 };
 
 // =============================================================================
-// MÓDULO 6: FACTURACIÓN Y KARDEX
+// MÓDULO 6: FACTURACIÓN Y KARDEX (SOLO CASOS FINALIZADOS + MANO DE OBRA)
 // =============================================================================
+function calcularMontosFactura(f) {
+    const subRep =
+        f.subtotal_repuestos !== undefined
+            ? Number(f.subtotal_repuestos)
+            : (f.items_kardex || []).reduce((acc, item) => acc + Number(item.sub_total || 0), 0);
+    const manoObra =
+        f.mano_obra !== undefined
+            ? Number(f.mano_obra)
+            : subRep > 0
+            ? Number((subRep * 0.2).toFixed(2))
+            : 200.0;
+    const tipoManoObra =
+        f.tipo_mano_obra || (subRep > 0 ? "20% sobre repuestos" : "Tarifa fija (sin repuestos)");
+    const totalFactura = Number((subRep + manoObra).toFixed(2));
+    return { subRep, manoObra, tipoManoObra, totalFactura };
+}
+
 async function loadFacturacionModule() {
-    renderSkeletonRows("tbody-facturas", 9, 3);
+    renderSkeletonRows("tbody-facturas", 10, 3);
     renderSkeletonRows("tbody-kardex-general", 7, 3);
 
-    const [facturas, kardex] = await Promise.all([
+    const [facturasRaw, kardex] = await Promise.all([
         apiFetch("/api/facturacion"),
         apiFetch("/api/kardex"),
     ]);
+
+    // Garantizar que en facturación solo estén los casos finalizados
+    const facturas = (facturasRaw || []).filter(
+        (f) => (f.estado_consulta || "").toLowerCase() === "finalizado"
+    );
     state.facturas = facturas;
     state.kardex = kardex;
 
     if (!facturas.length) {
-        renderEmptyRow("tbody-facturas", 9, "Sin facturas emitidas", "Las facturas se vinculan automáticamente a cada consulta registrada.");
+        renderEmptyRow(
+            "tbody-facturas",
+            10,
+            "Sin facturas de consultas finalizadas",
+            "En este módulo únicamente aparecen las consultas cuyo estado es Finalizado."
+        );
     } else {
         const tbodyF = document.getElementById("tbody-facturas");
         tbodyF.innerHTML = facturas
-            .map(
-                (f) => `
+            .map((f) => {
+                const { subRep, manoObra, tipoManoObra, totalFactura } = calcularMontosFactura(f);
+                return `
                 <tr>
                     <td class="mono" style="font-weight:600;">FAC-${String(f.id_factura).padStart(4, "0")}</td>
                     <td class="mono">#${f.id_consulta}</td>
@@ -1061,16 +1089,23 @@ async function loadFacturacionModule() {
                     <td class="mono">${escapeHtml(f.vehiculo_placa)}</td>
                     <td>${escapeHtml(f.mecanico_nombre)}</td>
                     <td>${getStatusBadge(f.estado_consulta)}</td>
-                    <td class="mono">${f.total_items} uds (${f.items_kardex.length} renglones)</td>
-                    <td class="mono" style="font-weight:600; color:var(--status-ok);">${formatMoney(f.total_factura)}</td>
+                    <td class="mono">
+                        <div>${formatMoney(subRep)}</div>
+                        <div style="font-size:10.5px; color:var(--text-muted);">${f.total_items} uds (${f.items_kardex.length} ítems)</div>
+                    </td>
+                    <td class="mono">
+                        <div>${formatMoney(manoObra)}</div>
+                        <div style="font-size:10.5px; color:var(--text-muted);">${escapeHtml(tipoManoObra)}</div>
+                    </td>
+                    <td class="mono" style="font-weight:600; color:var(--status-ok);">${formatMoney(totalFactura)}</td>
                     <td>
                         <button type="button" class="btn btn-sm btn-primary" onclick="verDetalleFactura(${f.id_factura})">
                             Ver Factura / Kardex
                         </button>
                     </td>
                 </tr>
-            `
-            )
+            `;
+            })
             .join("");
     }
 
@@ -1100,6 +1135,8 @@ window.verDetalleFactura = function (idFactura) {
     const f = state.facturas.find((x) => x.id_factura === idFactura);
     if (!f) return;
 
+    const { subRep, manoObra, tipoManoObra, totalFactura } = calcularMontosFactura(f);
+
     document.getElementById("modal-factura-title").textContent = `Factura FAC-${String(f.id_factura).padStart(4, "0")} // Consulta #${f.id_consulta}`;
     document.getElementById("modal-factura-subtitle").textContent = `Vehículo Placa ${f.vehiculo_placa} (VIN: ${f.vehiculo_vin}) — Estado: ${f.estado_consulta}`;
 
@@ -1118,7 +1155,7 @@ window.verDetalleFactura = function (idFactura) {
             `
               )
               .join("")
-        : `<tr><td colspan="6" style="text-align:center; color:var(--text-muted); padding:18px;">Sin repuestos cargados al Kardex en esta consulta.</td></tr>`;
+        : `<tr><td colspan="6" style="text-align:center; color:var(--text-muted); padding:18px;">Sin repuestos utilizados en esta consulta (se aplica tarifa fija de mano de obra: Q200.00).</td></tr>`;
 
     document.getElementById("modal-factura-body").innerHTML = `
         <div class="form-row" style="margin-bottom:14px; padding-bottom:12px; border-bottom:1px solid var(--border-subtle);">
@@ -1128,7 +1165,7 @@ window.verDetalleFactura = function (idFactura) {
                 <div class="mono" style="font-size:12px; color:var(--text-secondary);">NIT: ${escapeHtml(f.cliente_nit)} | Tel: ${escapeHtml(f.cliente_telefono || "N/A")}</div>
             </div>
             <div>
-                <div style="font-size:11px; color:var(--text-muted); text-transform:uppercase;">Datos de la Consulta</div>
+                <div style="font-size:11px; color:var(--text-muted); text-transform:uppercase;">Datos de la Consulta Finalizada</div>
                 <div style="font-weight:500; margin-top:2px;">Mecánico: ${escapeHtml(f.mecanico_nombre)}</div>
                 <div class="mono" style="font-size:11.5px; color:var(--text-secondary);">Ingreso: ${formatDate(f.fecha_ingreso)} | Salida: ${formatDate(f.fecha_salida)}</div>
             </div>
@@ -1136,7 +1173,7 @@ window.verDetalleFactura = function (idFactura) {
 
         <div style="margin-bottom:14px; padding:10px 12px; background:var(--bg-panel); border:1px solid var(--border-subtle); border-radius:4px;">
             <div style="font-size:11.5px; color:var(--text-secondary);"><strong>Motivo de Consulta:</strong> ${escapeHtml(f.detalle_consulta)}</div>
-            <div style="font-size:11.5px; color:var(--text-secondary); margin-top:4px;"><strong>Diagnóstico Técnico:</strong> ${escapeHtml(f.detalle_diagnostico || "En proceso")}</div>
+            <div style="font-size:11.5px; color:var(--text-secondary); margin-top:4px;"><strong>Diagnóstico Técnico:</strong> ${escapeHtml(f.detalle_diagnostico || "Diagnóstico completado")}</div>
         </div>
 
         <div class="table-wrap" style="border:1px solid var(--border-default); border-radius:4px;">
@@ -1155,10 +1192,18 @@ window.verDetalleFactura = function (idFactura) {
             </table>
         </div>
 
-        <div style="margin-top:16px; display:flex; align-items:center; justify-content:space-between; padding-top:12px; border-top:1px solid var(--border-default);">
-            <span style="color:var(--text-secondary); font-size:12px;">Total de unidades en Kardex: <strong class="mono">${f.total_items}</strong></span>
-            <div style="font-size:15px; font-weight:600;">
-                Total Factura: <span class="mono" style="color:var(--status-ok);">${formatMoney(f.total_factura)}</span>
+        <div style="margin-top:16px; padding:12px 14px; background:var(--bg-panel); border:1px solid var(--border-default); border-radius:4px;">
+            <div style="display:flex; justify-content:space-between; margin-bottom:6px; font-size:12.5px; color:var(--text-secondary);">
+                <span>Subtotal Repuestos Usados (${f.total_items} uds):</span>
+                <span class="mono">${formatMoney(subRep)}</span>
+            </div>
+            <div style="display:flex; justify-content:space-between; margin-bottom:10px; padding-bottom:10px; border-bottom:1px solid var(--border-subtle); font-size:12.5px; color:var(--text-secondary);">
+                <span>Mano de Obra Automática <span class="badge" style="margin-left:6px;">${escapeHtml(tipoManoObra)}</span>:</span>
+                <span class="mono">${formatMoney(manoObra)}</span>
+            </div>
+            <div style="display:flex; justify-content:space-between; align-items:center; font-size:15px; font-weight:600;">
+                <span>Total Factura:</span>
+                <span class="mono" style="color:var(--status-ok);">${formatMoney(totalFactura)}</span>
             </div>
         </div>
     `;

@@ -3,11 +3,12 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Taller Pro — Sistema Operativo de Diagnóstico, Bodega y Facturación</title>
+    <title>Taller — Sistema Operativo de Diagnóstico, Bodega y Facturación</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="./css/styles.css" />
+    <link rel="icon" href="https://speero.net/favicon.ico?favicon.35qzqu6vcpjrz.ico" sizes="48x48" type="image/x-icon"/>
 </head>
 <body>
 
@@ -19,7 +20,7 @@
             <div class="auth-header">
                 <div class="brand-mark">
                     <span class="brand-square">TP</span>
-                    <span>TALLER PRO // OS</span>
+                    <span>TALLER</span>
                 </div>
                 <p class="auth-subtitle">Control técnico de diagnóstico vehicular, kardex e inventario.</p>
             </div>
@@ -52,7 +53,7 @@
                 <div class="sidebar-brand">
                     <div class="brand-mark">
                         <span class="brand-square">TP</span>
-                        <span>TALLER PRO</span>
+                        <span>TALLER</span>
                     </div>
                     <span id="db-engine-badge" class="env-badge">PG/SQL</span>
                 </div>
@@ -594,8 +595,8 @@
                         <div class="panel">
                             <div class="panel-header">
                                 <div>
-                                    <div class="panel-title">Facturación por Consulta y Movimientos Kardex</div>
-                                    <div class="panel-subtitle">Cada despacho de bodega alimenta automáticamente los renglones del Kardex de la factura</div>
+                                    <div class="panel-title">Facturación de Casos Finalizados y Desglose de Mano de Obra</div>
+                                    <div class="panel-subtitle">Muestra únicamente consultas finalizadas. Mano de obra: 20% sobre repuestos usados o Q200.00 tarifa fija si no se usaron repuestos</div>
                                 </div>
                                 <button type="button" id="btn-refresh-facturacion" class="btn btn-sm">Actualizar Facturas</button>
                             </div>
@@ -608,8 +609,9 @@
                                             <th>Cliente / NIT</th>
                                             <th>Vehículo (Placa)</th>
                                             <th>Mecánico</th>
-                                            <th>Estado Consulta</th>
-                                            <th>Repuestos (Kardex)</th>
+                                            <th>Estado</th>
+                                            <th>Subtotal Repuestos</th>
+                                            <th>Mano de Obra</th>
                                             <th>Total Factura</th>
                                             <th>Detalle</th>
                                         </tr>
