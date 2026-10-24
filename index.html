@@ -1,0 +1,769 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Taller Pro — Sistema Operativo de Diagnóstico, Bodega y Facturación</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="./css/styles.css" />
+</head>
+<body>
+
+    <!-- ======================================================================
+         PANTALLA DE AUTENTICACIÓN (LOGIN CON BCRYPT + JWT)
+         ====================================================================== -->
+    <div id="auth-screen" class="auth-screen">
+        <div class="auth-container">
+            <div class="auth-header">
+                <div class="brand-mark">
+                    <span class="brand-square">TP</span>
+                    <span>TALLER PRO // OS</span>
+                </div>
+                <p class="auth-subtitle">Control técnico de diagnóstico vehicular, kardex e inventario.</p>
+            </div>
+
+            <div class="auth-body">
+                <form id="login-form">
+                    <div class="form-group">
+                        <label for="login-api-url">Endpoint Backend API (Render URL o vacío si es local)</label>
+                        <input type="text" id="login-api-url" placeholder="https://tu-backend.onrender.com" class="mono" />
+                    </div>
+                    <div class="form-group">
+                        <label for="login-alias">Alias de Usuario</label>
+                        <input type="text" id="login-alias" placeholder="ej. admin, mecanico, recepcion, bodega" required autocomplete="username" />
+                    </div>
+                    <div class="form-group">
+                        <label for="login-password">Contraseña</label>
+                        <input type="password" id="login-password" placeholder="••••••••" required autocomplete="current-password" />
+                    </div>
+                    <button type="submit" id="login-submit-btn" class="btn btn-primary btn-block" style="margin-top: 6px;">
+                        Iniciar Sesión
+                    </button>
+                </form>
+            </div>
+
+            <div class="auth-quick-roles">
+                <div class="quick-role-title">Acceso rápido por rol (clave: admin123)</div>
+                <div class="quick-role-grid">
+                    <button type="button" class="quick-role-btn" data-alias="admin" data-pass="admin123">
+                        <span>Administrador</span>
+                        <span class="mono">admin</span>
+                    </button>
+                    <button type="button" class="quick-role-btn" data-alias="mecanico" data-pass="admin123">
+                        <span>Mecánico</span>
+                        <span class="mono">mecanico</span>
+                    </button>
+                    <button type="button" class="quick-role-btn" data-alias="recepcion" data-pass="admin123">
+                        <span>Recepcionista</span>
+                        <span class="mono">recepcion</span>
+                    </button>
+                    <button type="button" class="quick-role-btn" data-alias="bodega" data-pass="admin123">
+                        <span>Bodeguero</span>
+                        <span class="mono">bodega</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ======================================================================
+         SHELL OPERATIVO PRINCIPAL (RESTRINGIDO SEGÚN ROL)
+         ====================================================================== -->
+    <div id="app-shell" class="app-shell hidden">
+        <!-- Barra Lateral -->
+        <aside class="sidebar">
+            <div class="sidebar-top">
+                <div class="sidebar-brand">
+                    <div class="brand-mark">
+                        <span class="brand-square">TP</span>
+                        <span>TALLER PRO</span>
+                    </div>
+                    <span id="db-engine-badge" class="env-badge">PG/SQL</span>
+                </div>
+
+                <div class="nav-section">
+                    <div class="nav-section-label">Módulos Autorizados</div>
+                    <ul id="nav-list" class="nav-list">
+                        <!-- Renderizado dinámicamente según rol -->
+                    </ul>
+                </div>
+            </div>
+
+            <div class="sidebar-footer">
+                <div class="user-card">
+                    <div class="user-meta">
+                        <div id="current-user-name" class="user-name">Usuario</div>
+                        <span id="current-user-role" class="user-role-tag">ROL</span>
+                    </div>
+                    <button type="button" id="logout-btn" class="btn btn-sm" title="Cerrar sesión">
+                        Salir
+                    </button>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Área Principal -->
+        <div class="main-area">
+            <header class="topbar">
+                <div class="topbar-breadcrumb">
+                    <span class="breadcrumb-root">taller_pro</span>
+                    <span class="breadcrumb-sep">/</span>
+                    <span id="active-module-title" class="breadcrumb-current">Consultas y Diagnóstico</span>
+                </div>
+
+                <div class="topbar-kpi-strip">
+                    <div class="kpi-pill">
+                        <span>Consultas Activas:</span>
+                        <strong id="kpi-consultas">0</strong>
+                    </div>
+                    <div class="kpi-pill">
+                        <span>Solicitudes Bodega:</span>
+                        <strong id="kpi-solicitudes">0</strong>
+                    </div>
+                    <div class="kpi-pill">
+                        <span>Stock Unidades:</span>
+                        <strong id="kpi-stock">0</strong>
+                    </div>
+                    <div class="kpi-pill">
+                        <span>Facturado Kardex:</span>
+                        <strong id="kpi-facturado">Q0.00</strong>
+                    </div>
+                </div>
+            </header>
+
+            <main class="workspace-content">
+
+                <!-- ==========================================================
+                     MÓDULO 1: CONSULTAS Y DIAGNÓSTICO (Admin, Recepcionista, Mecánico)
+                     ========================================================== -->
+                <section id="view-consultas" class="module-view hidden">
+                    <div class="split-layout">
+                        <!-- Columna izquierda: Formularios operativos -->
+                        <div class="stack-layout">
+                            <div class="panel">
+                                <div class="panel-header">
+                                    <div>
+                                        <div class="panel-title">Ingreso / Edición de Consulta</div>
+                                        <div class="panel-subtitle">Solo usuarios con rol Mecánico pueden ser asignados</div>
+                                    </div>
+                                    <button type="button" id="btn-reset-consulta" class="btn btn-sm">Limpiar</button>
+                                </div>
+                                <div class="panel-body">
+                                    <form id="form-consulta">
+                                        <input type="hidden" id="consulta-id-edit" />
+                                        <div class="form-group">
+                                            <label for="consulta-vehiculo">Vehículo (Placa / VIN / Propietario)</label>
+                                            <select id="consulta-vehiculo" required></select>
+                                        </div>
+                                        <div class="form-row">
+                                            <div class="form-group">
+                                                <label for="consulta-mecanico">Mecánico Asignado</label>
+                                                <select id="consulta-mecanico" required></select>
+                                            </div>
+                                            <div class="form-group">
+                                                <label for="consulta-estado">Estado</label>
+                                                <select id="consulta-estado" required></select>
+                                            </div>
+                                        </div>
+                                        <div class="form-group">
+                                            <label for="consulta-detalle">Detalle de Consulta (Falla reportada)</label>
+                                            <textarea id="consulta-detalle" placeholder="Describa el síntoma o servicio solicitado por el cliente..." required></textarea>
+                                        </div>
+                                        <div class="form-group">
+                                            <label for="consulta-diagnostico">Detalle de Diagnóstico Técnico</label>
+                                            <textarea id="consulta-diagnostico" placeholder="Hallazgos técnicos del mecánico y repuestos requeridos..."></textarea>
+                                        </div>
+                                        <div style="display: flex; gap: 8px;">
+                                            <button type="submit" class="btn btn-primary" style="flex: 1;">
+                                                Guardar Consulta
+                                            </button>
+                                            <button type="button" id="btn-finalizar-consulta" class="btn btn-success hidden">
+                                                Finalizar y Cerrar
+                                            </button>
+                                        </div>
+                                    </form>
+                                </div>
+                            </div>
+
+                            <!-- Subpanel para solicitar repuestos al bodeguero (Mecánico / Admin) -->
+                            <div id="panel-solicitar-repuesto" class="panel">
+                                <div class="panel-header">
+                                    <div>
+                                        <div class="panel-title">Solicitar Repuesto a Bodega</div>
+                                        <div class="panel-subtitle">Al despacharse se asocia en automático al Kardex/Factura</div>
+                                    </div>
+                                </div>
+                                <div class="panel-body">
+                                    <form id="form-solicitud-repuesto">
+                                        <div class="form-group">
+                                            <label for="sol-consulta">Consulta Activa</label>
+                                            <select id="sol-consulta" required></select>
+                                        </div>
+                                        <div class="form-group">
+                                            <label for="sol-producto">Producto en Bodega (Stock disponible)</label>
+                                            <select id="sol-producto" required></select>
+                                        </div>
+                                        <div class="form-group">
+                                            <label for="sol-cantidad">Cantidad Requerida</label>
+                                            <input type="number" id="sol-cantidad" min="1" value="1" required class="mono" />
+                                        </div>
+                                        <button type="submit" class="btn btn-primary btn-block">
+                                            Enviar Solicitud al Bodeguero
+                                        </button>
+                                    </form>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Columna derecha: Tabla de Consultas y Solicitudes -->
+                        <div class="stack-layout">
+                            <div class="panel">
+                                <div class="panel-header">
+                                    <div>
+                                        <div class="panel-title">Bitácora de Consultas Vehiculares</div>
+                                        <div class="panel-subtitle">Selecciona una fila para actualizar diagnóstico o estado</div>
+                                    </div>
+                                    <button type="button" id="btn-refresh-consultas" class="btn btn-sm">Actualizar</button>
+                                </div>
+                                <div class="table-wrap">
+                                    <table class="data-table">
+                                        <thead>
+                                            <tr>
+                                                <th>ID</th>
+                                                <th>Vehículo / Cliente</th>
+                                                <th>Mecánico</th>
+                                                <th>Estado</th>
+                                                <th>Consulta & Diagnóstico</th>
+                                                <th>Ingreso / Salida</th>
+                                                <th>Acción</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="tbody-consultas"></tbody>
+                                    </table>
+                                </div>
+                            </div>
+
+                            <div class="panel">
+                                <div class="panel-header">
+                                    <div>
+                                        <div class="panel-title">Historial de Repuestos Solicitados por Consulta</div>
+                                        <div class="panel-subtitle">Estado de despacho desde Bodega hacia Kardex/Factura</div>
+                                    </div>
+                                </div>
+                                <div class="table-wrap">
+                                    <table class="data-table">
+                                        <thead>
+                                            <tr>
+                                                <th>ID Sol.</th>
+                                                <th>Consulta / Placa</th>
+                                                <th>Repuesto</th>
+                                                <th>Cant.</th>
+                                                <th>Subtotal Est.</th>
+                                                <th>Estado</th>
+                                                <th>Fecha</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="tbody-solicitudes-consulta"></tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- ==========================================================
+                     MÓDULO 2: VEHÍCULOS (Admin, Recepcionista, Mecánico)
+                     ========================================================== -->
+                <section id="view-vehiculos" class="module-view hidden">
+                    <div class="split-layout">
+                        <div class="panel" id="panel-form-vehiculo">
+                            <div class="panel-header">
+                                <div>
+                                    <div class="panel-title">Registro de Vehículo</div>
+                                    <div class="panel-subtitle">Asociado a propietario en tabla personas</div>
+                                </div>
+                                <button type="button" id="btn-reset-vehiculo" class="btn btn-sm">Limpiar</button>
+                            </div>
+                            <div class="panel-body">
+                                <form id="form-vehiculo">
+                                    <input type="hidden" id="vehiculo-id-edit" />
+                                    <div class="form-group">
+                                        <label for="vehiculo-persona">Propietario (Dueño)</label>
+                                        <select id="vehiculo-persona" required></select>
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="vehiculo-placa">Placa</label>
+                                        <input type="text" id="vehiculo-placa" placeholder="ej. P-482KLM" required class="mono" />
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="vehiculo-vin">Número de Chasis (VIN)</label>
+                                        <input type="text" id="vehiculo-vin" placeholder="ej. JTDBE32K900128931" required class="mono" />
+                                    </div>
+                                    <button type="submit" id="btn-save-vehiculo" class="btn btn-primary btn-block">
+                                        Guardar Vehículo
+                                    </button>
+                                </form>
+                            </div>
+                        </div>
+
+                        <div class="panel">
+                            <div class="panel-header">
+                                <div>
+                                    <div class="panel-title">Padrón de Vehículos Registrados</div>
+                                    <div class="panel-subtitle">Búsqueda por placa, VIN o nombre del propietario</div>
+                                </div>
+                            </div>
+                            <div class="panel-toolbar">
+                                <input type="text" id="search-vehiculos" placeholder="Filtrar por placa, VIN o propietario..." />
+                                <button type="button" id="btn-search-vehiculos" class="btn">Buscar</button>
+                            </div>
+                            <div class="table-wrap">
+                                <table class="data-table">
+                                    <thead>
+                                        <tr>
+                                            <th>ID</th>
+                                            <th>Placa</th>
+                                            <th>VIN</th>
+                                            <th>Propietario (Dueño)</th>
+                                            <th>NIT</th>
+                                            <th>Acciones</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="tbody-vehiculos"></tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- ==========================================================
+                     MÓDULO 3: PERSONAS (Admin, Recepcionista)
+                     ========================================================== -->
+                <section id="view-personas" class="module-view hidden">
+                    <div class="split-layout">
+                        <div class="panel">
+                            <div class="panel-header">
+                                <div>
+                                    <div class="panel-title">Ficha de Persona</div>
+                                    <div class="panel-subtitle">Clientes propietarios y personal del taller</div>
+                                </div>
+                                <button type="button" id="btn-reset-persona" class="btn btn-sm">Limpiar</button>
+                            </div>
+                            <div class="panel-body">
+                                <form id="form-persona">
+                                    <input type="hidden" id="persona-id-edit" />
+                                    <div class="form-group">
+                                        <label for="persona-nombre">Nombre Completo</label>
+                                        <input type="text" id="persona-nombre" placeholder="Nombre y apellidos" required />
+                                    </div>
+                                    <div class="form-row">
+                                        <div class="form-group">
+                                            <label for="persona-nit">NIT</label>
+                                            <input type="text" id="persona-nit" placeholder="ej. 78945612-K" required class="mono" />
+                                        </div>
+                                        <div class="form-group">
+                                            <label for="persona-telefono">Teléfono</label>
+                                            <input type="text" id="persona-telefono" placeholder="5550-0000" class="mono" />
+                                        </div>
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="persona-email">Correo Electrónico</label>
+                                        <input type="email" id="persona-email" placeholder="cliente@dominio.com" />
+                                    </div>
+                                    <div class="form-row">
+                                        <div class="form-group">
+                                            <label for="persona-edad">Edad</label>
+                                            <input type="number" id="persona-edad" min="18" max="120" placeholder="35" class="mono" />
+                                        </div>
+                                        <div class="form-group">
+                                            <label for="persona-sexo">Sexo</label>
+                                            <select id="persona-sexo">
+                                                <option value="">Seleccionar...</option>
+                                                <option value="M">M - Masculino</option>
+                                                <option value="F">F - Femenino</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <button type="submit" class="btn btn-primary btn-block">
+                                        Guardar Persona
+                                    </button>
+                                </form>
+                            </div>
+                        </div>
+
+                        <div class="panel">
+                            <div class="panel-header">
+                                <div>
+                                    <div class="panel-title">Directorio de Personas</div>
+                                    <div class="panel-subtitle">Clientes y empleados registrados en base de datos</div>
+                                </div>
+                            </div>
+                            <div class="panel-toolbar">
+                                <input type="text" id="search-personas" placeholder="Buscar por nombre, NIT o email..." />
+                                <button type="button" id="btn-search-personas" class="btn">Filtrar</button>
+                            </div>
+                            <div class="table-wrap">
+                                <table class="data-table">
+                                    <thead>
+                                        <tr>
+                                            <th>ID</th>
+                                            <th>Nombre</th>
+                                            <th>NIT</th>
+                                            <th>Teléfono</th>
+                                            <th>Email</th>
+                                            <th>Edad / Sexo</th>
+                                            <th>Acción</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="tbody-personas"></tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- ==========================================================
+                     MÓDULO 4: PRODUCTOS Y BUSCADOR API SPEERO (Bodeguero, Mecánico, Admin)
+                     ========================================================== -->
+                <section id="view-productos" class="module-view hidden">
+                    <div class="stack-layout">
+                        <!-- Buscador API Speero (Visible para Bodeguero y Administrador) -->
+                        <div id="panel-speero-api" class="panel">
+                            <div class="panel-header">
+                                <div>
+                                    <div class="panel-title">Buscador Externo de Repuestos — API Speero (https://speero.net/api/v1)</div>
+                                    <div class="panel-subtitle">Busca repuestos en el proveedor externo para comprarlos e incorporarlos al inventario local</div>
+                                </div>
+                                <span id="speero-status-badge" class="badge">API Lista</span>
+                            </div>
+                            <div class="panel-toolbar">
+                                <input type="text" id="speero-query" placeholder="Buscar en https://speero.net/api/v1 (ej. pastillas de freno, filtro aceite, amortiguador)..." />
+                                <button type="button" id="btn-speero-search" class="btn btn-primary">
+                                    Consultar API Speero
+                                </button>
+                            </div>
+                            <div id="speero-results-container" class="panel-body hidden">
+                                <div id="speero-notice" class="notice-banner hidden"></div>
+                                <div class="table-wrap">
+                                    <table class="data-table" id="table-speero-results">
+                                        <thead>
+                                            <tr>
+                                                <th>SKU / Origen</th>
+                                                <th>Repuesto</th>
+                                                <th>Precio Sugerido</th>
+                                                <th>Acción</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="tbody-speero"></tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="split-layout-wide">
+                            <!-- Formulario de Compra / Registro Manual para Bodeguero y Admin -->
+                            <div id="panel-compra-bodega" class="panel">
+                                <div class="panel-header">
+                                    <div>
+                                        <div class="panel-title">Comprar / Registrar Producto en Base de Datos</div>
+                                        <div class="panel-subtitle">Soporta datos del API o ingreso manual (URL o Imagen Base64)</div>
+                                    </div>
+                                    <button type="button" id="btn-reset-compra" class="btn btn-sm">Limpiar</button>
+                                </div>
+                                <div class="panel-body">
+                                    <form id="form-compra-producto">
+                                        <input type="hidden" id="compra-id-producto" />
+                                        <div class="form-group">
+                                            <label for="compra-nombre">Nombre del Repuesto / Producto</label>
+                                            <input type="text" id="compra-nombre" placeholder="ej. Juego Pastillas de Freno Cerámicas" required />
+                                        </div>
+
+                                        <div class="form-group">
+                                            <label for="compra-url-imagen">URL de Imagen o Cadena Base64</label>
+                                            <input type="text" id="compra-url-imagen" placeholder="https://... o data:image/png;base64,..." />
+                                        </div>
+
+                                        <div class="form-group">
+                                            <label for="compra-file-base64">O cargar archivo de imagen local (convierte automáticamente a Base64)</label>
+                                            <input type="file" id="compra-file-base64" accept="image/*" style="font-size: 11.5px; color: var(--text-secondary);" />
+                                            <div id="compra-img-preview" class="img-preview-box">
+                                                <span>Vista previa de imagen (URL / Base64)</span>
+                                            </div>
+                                        </div>
+
+                                        <div class="form-row">
+                                            <div class="form-group">
+                                                <label for="compra-costo">Costo de Compra Unitario (Q)</label>
+                                                <input type="number" id="compra-costo" step="0.01" min="0.01" placeholder="250.00" required class="mono" />
+                                            </div>
+                                            <div class="form-group">
+                                                <label for="compra-venta-calc">Costo de Venta (Compra × 1.20)</label>
+                                                <input type="text" id="compra-venta-calc" readonly value="Q0.00" class="mono" />
+                                            </div>
+                                        </div>
+
+                                        <div class="form-group">
+                                            <label for="compra-cantidad">Cantidad Comprada (Ingreso a Inventario)</label>
+                                            <input type="number" id="compra-cantidad" min="1" value="5" required class="mono" />
+                                        </div>
+
+                                        <button type="submit" class="btn btn-primary btn-block">
+                                            Registrar Compra e Ingresar a Inventario
+                                        </button>
+                                    </form>
+                                </div>
+                            </div>
+
+                            <!-- Catálogo de Productos en Base de Datos -->
+                            <div class="panel">
+                                <div class="panel-header">
+                                    <div>
+                                        <div class="panel-title">Catálogo de Productos en Base de Datos</div>
+                                        <div class="panel-subtitle">Disponibilidad consolidada y precio de venta (+20%)</div>
+                                    </div>
+                                    <button type="button" id="btn-refresh-productos" class="btn btn-sm">Actualizar</button>
+                                </div>
+                                <div class="panel-toolbar">
+                                    <input type="text" id="search-productos-local" placeholder="Filtrar productos en catálogo local..." />
+                                    <button type="button" id="btn-search-productos-local" class="btn">Filtrar</button>
+                                </div>
+                                <div class="table-wrap">
+                                    <table class="data-table">
+                                        <thead>
+                                            <tr>
+                                                <th>ID</th>
+                                                <th>Producto</th>
+                                                <th>Stock Total</th>
+                                                <th>Últ. Costo Compra</th>
+                                                <th>Precio Venta (×1.2)</th>
+                                                <th>Acción</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="tbody-productos"></tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- ==========================================================
+                     MÓDULO 5: INVENTARIO Y DESPACHO DE SOLICITUDES (Bodeguero, Admin)
+                     ========================================================== -->
+                <section id="view-inventario" class="module-view hidden">
+                    <div class="stack-layout">
+                        <!-- Cola de Despacho de Repuestos Solicitados por Mecánicos -->
+                        <div class="panel">
+                            <div class="panel-header">
+                                <div>
+                                    <div class="panel-title">Solicitudes de Repuestos de Mecánicos (Cola de Despacho)</div>
+                                    <div class="panel-subtitle">Al despachar una solicitud, se descuenta de inventario y se carga en automático al Kardex/Factura de la consulta</div>
+                                </div>
+                                <button type="button" id="btn-refresh-inventario" class="btn btn-sm">Actualizar Cola</button>
+                            </div>
+                            <div class="table-wrap">
+                                <table class="data-table">
+                                    <thead>
+                                        <tr>
+                                            <th>ID Sol.</th>
+                                            <th>Consulta / Vehículo</th>
+                                            <th>Mecánico Solicitante</th>
+                                            <th>Producto Solicitado</th>
+                                            <th>Cant. Solicitada</th>
+                                            <th>Stock Actual</th>
+                                            <th>Subtotal (Venta)</th>
+                                            <th>Estado</th>
+                                            <th>Acción de Bodega</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="tbody-despachos-bodega"></tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        <!-- Lotes de Inventario en Base de Datos -->
+                        <div class="panel">
+                            <div class="panel-header">
+                                <div>
+                                    <div class="panel-title">Lotes en Tabla Inventario (FIFO)</div>
+                                    <div class="panel-subtitle">Registro histórico de compras con costo_compra, costo_venta (×1.20), fecha_compra y cantidad disponible</div>
+                                </div>
+                            </div>
+                            <div class="table-wrap">
+                                <table class="data-table">
+                                    <thead>
+                                        <tr>
+                                            <th>ID Inv.</th>
+                                            <th>Producto</th>
+                                            <th>Costo Compra</th>
+                                            <th>Costo Venta (×1.2)</th>
+                                            <th>Fecha Compra</th>
+                                            <th>Cantidad Disponible</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="tbody-inventario-lotes"></tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- ==========================================================
+                     MÓDULO 6: FACTURACIÓN Y KARDEX (Recepcionista, Admin, Bodeguero)
+                     ========================================================== -->
+                <section id="view-facturacion" class="module-view hidden">
+                    <div class="stack-layout">
+                        <div class="panel">
+                            <div class="panel-header">
+                                <div>
+                                    <div class="panel-title">Facturación por Consulta y Movimientos Kardex</div>
+                                    <div class="panel-subtitle">Cada despacho de bodega alimenta automáticamente los renglones del Kardex de la factura</div>
+                                </div>
+                                <button type="button" id="btn-refresh-facturacion" class="btn btn-sm">Actualizar Facturas</button>
+                            </div>
+                            <div class="table-wrap">
+                                <table class="data-table">
+                                    <thead>
+                                        <tr>
+                                            <th># Factura</th>
+                                            <th># Consulta</th>
+                                            <th>Cliente / NIT</th>
+                                            <th>Vehículo (Placa)</th>
+                                            <th>Mecánico</th>
+                                            <th>Estado Consulta</th>
+                                            <th>Repuestos (Kardex)</th>
+                                            <th>Total Factura</th>
+                                            <th>Detalle</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="tbody-facturas"></tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        <div class="panel">
+                            <div class="panel-header">
+                                <div>
+                                    <div class="panel-title">Registro General de Kardex</div>
+                                    <div class="panel-subtitle">Todos los movimientos de salida de repuestos asociados a facturas</div>
+                                </div>
+                            </div>
+                            <div class="table-wrap">
+                                <table class="data-table">
+                                    <thead>
+                                        <tr>
+                                            <th>ID Kardex</th>
+                                            <th>ID Factura</th>
+                                            <th>ID Producto</th>
+                                            <th>Descripción del Repuesto</th>
+                                            <th>Cantidad</th>
+                                            <th>Precio Unit. Venta</th>
+                                            <th>Subtotal</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="tbody-kardex-general"></tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- ==========================================================
+                     MÓDULO 7: USUARIOS Y ROLES (Exclusivo Administrador)
+                     ========================================================== -->
+                <section id="view-usuarios" class="module-view hidden">
+                    <div class="split-layout">
+                        <div class="panel">
+                            <div class="panel-header">
+                                <div>
+                                    <div class="panel-title">Gestión de Usuarios</div>
+                                    <div class="panel-subtitle">Contraseñas cifradas con bcrypt y control de sesión por token</div>
+                                </div>
+                                <button type="button" id="btn-reset-usuario" class="btn btn-sm">Limpiar</button>
+                            </div>
+                            <div class="panel-body">
+                                <form id="form-usuario">
+                                    <input type="hidden" id="usuario-id-edit" />
+                                    <div class="form-group">
+                                        <label for="usuario-persona">Persona Asociada</label>
+                                        <select id="usuario-persona" required></select>
+                                    </div>
+                                    <div class="form-row">
+                                        <div class="form-group">
+                                            <label for="usuario-rol">Rol del Sistema</label>
+                                            <select id="usuario-rol" required></select>
+                                        </div>
+                                        <div class="form-group">
+                                            <label for="usuario-estado">Estado</label>
+                                            <select id="usuario-estado" required></select>
+                                        </div>
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="usuario-alias">Alias (Login)</label>
+                                        <input type="text" id="usuario-alias" placeholder="ej. mecanico2" required class="mono" />
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="usuario-password">Contraseña (bcrypt)</label>
+                                        <input type="password" id="usuario-password" placeholder="Dejar en blanco al editar para conservar actual" />
+                                    </div>
+                                    <button type="submit" class="btn btn-primary btn-block">
+                                        Guardar Usuario
+                                    </button>
+                                </form>
+                            </div>
+                        </div>
+
+                        <div class="panel">
+                            <div class="panel-header">
+                                <div>
+                                    <div class="panel-title">Usuarios Registrados y Matriz de Roles</div>
+                                    <div class="panel-subtitle">Control de acceso basado en roles (RBAC)</div>
+                                </div>
+                            </div>
+                            <div class="table-wrap">
+                                <table class="data-table">
+                                    <thead>
+                                        <tr>
+                                            <th>ID</th>
+                                            <th>Alias</th>
+                                            <th>Persona</th>
+                                            <th>Rol Asignado</th>
+                                            <th>Estado</th>
+                                            <th>Acción</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="tbody-usuarios"></tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+            </main>
+        </div>
+    </div>
+
+    <!-- ======================================================================
+         MODAL DETALLE DE FACTURA Y KARDEX
+         ====================================================================== -->
+    <div id="modal-factura" class="modal-backdrop hidden">
+        <div class="modal-window">
+            <div class="panel-header">
+                <div>
+                    <div id="modal-factura-title" class="panel-title">Detalle de Factura #0</div>
+                    <div id="modal-factura-subtitle" class="panel-subtitle">Desglose técnico de consulta y kardex de repuestos</div>
+                </div>
+                <button type="button" id="btn-close-modal-factura" class="btn btn-sm">Cerrar [ESC]</button>
+            </div>
+            <div id="modal-factura-body" class="panel-body"></div>
+        </div>
+    </div>
+
+    <!-- Contenedor de notificaciones operativas -->
+    <div id="toast-stack" class="toast-stack"></div>
+
+    <script src="./js/app.js"></script>
+</body>
+</html>
