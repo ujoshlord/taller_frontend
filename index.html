@@ -407,15 +407,15 @@
                         <div id="panel-speero-api" class="panel">
                             <div class="panel-header">
                                 <div>
-                                    <div class="panel-title">Buscador Externo de Repuestos — API Speero (https://speero.net/api/v1/search)</div>
-                                    <div class="panel-subtitle">Busca repuestos por término en inglés/código OEM (ej. brake, filter, spark plug) para comprarlos e incorporarlos al inventario</div>
+                                    <div class="panel-title">Buscador de Repuestos</div>
+                                    <div class="panel-subtitle">Busca repuestos por término o código OEM para comprarlos e incorporarlos al inventario</div>
                                 </div>
                                 <span id="speero-status-badge" class="badge">API Lista</span>
                             </div>
                             <div class="panel-toolbar">
                                 <input type="text" id="speero-query" placeholder="Buscar en https://speero.net/api/v1/search?q= (ej. brake, oil filter, clutch, 581012HA10)..." />
                                 <button type="button" id="btn-speero-search" class="btn btn-primary">
-                                    Consultar API Speero
+                                    Consultar
                                 </button>
                             </div>
                             <div id="speero-results-container" class="panel-body hidden">
@@ -425,7 +425,7 @@
                                         <thead>
                                             <tr>
                                                 <th>OEM / Grado</th>
-                                                <th>Repuesto (Nombre / URL)</th>
+                                                <th>Repuesto</th>
                                                 <th>Disponibilidad</th>
                                                 <th>Precio Proveedor</th>
                                                 <th>Acción</th>
@@ -434,6 +434,7 @@
                                         <tbody id="tbody-speero"></tbody>
                                     </table>
                                 </div>
+                                <div id="speero-pagination" class="pagination-bar hidden"></div>
                             </div>
                         </div>
 
@@ -443,7 +444,7 @@
                                 <div class="panel-header">
                                     <div>
                                         <div class="panel-title">Comprar / Registrar Producto en Base de Datos</div>
-                                        <div class="panel-subtitle">Soporta datos del API o ingreso manual (URL o Imagen Base64)</div>
+                                        <div class="panel-subtitle">Soporta datos del API o ingreso manual</div>
                                     </div>
                                     <button type="button" id="btn-reset-compra" class="btn btn-sm">Limpiar</button>
                                 </div>
@@ -734,6 +735,12 @@
             </div>
             <div id="modal-factura-body" class="panel-body"></div>
         </div>
+    </div>
+
+    <!-- Tooltip flotante para ampliar imagen al pasar el cursor -->
+    <div id="img-zoom-tooltip" class="img-zoom-tooltip hidden">
+        <img id="img-zoom-target" src="" alt="Vista ampliada" />
+        <div id="img-zoom-caption" class="img-zoom-caption"></div>
     </div>
 
     <!-- Contenedor de notificaciones operativas -->

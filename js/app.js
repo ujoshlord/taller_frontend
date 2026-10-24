@@ -640,7 +640,14 @@ async function loadProductosModule(query = "") {
                 <td class="mono">#${p.id_producto}</td>
                 <td>
                     <div class="thumb-cell">
-                        <img src="${escapeHtml(imgSrc)}" alt="img" class="product-thumb" onerror="this.src='${fallbackSvg}'" />
+                        <img
+                            src="${escapeHtml(imgSrc)}"
+                            alt="img"
+                            class="product-thumb"
+                            data-zoom-src="${escapeHtml(imgSrc)}"
+                            data-zoom-caption="${escapeHtml(p.nombre)}"
+                            onerror="this.src='${fallbackSvg}'"
+                        />
                         <div>
                             <div style="font-weight:500;">${escapeHtml(p.nombre)}</div>
                             <div class="mono" style="font-size:10.5px; color:var(--text-muted);">
@@ -685,7 +692,12 @@ window.irASolicitarProducto = async function (idProducto) {
     notify("Selecciona la consulta activa y confirma la cantidad a solicitar al bodeguero.", "info");
 };
 
-async function consultarSpeeroAPI() {
+window.cambiarPaginaSpeero = function (targetPage) {
+    consultarSpeeroAPI(targetPage);
+};
+
+async function consultarSpeeroAPI(page = 1) {
+    const currentPage = typeof page === "number" && page >= 1 ? page : 1;
     const q = document.getElementById("speero-query").value.trim();
     if (!q) {
         notify("Ingresa el término de búsqueda para Speero API (ej. brake, filter).", "error");
@@ -696,8 +708,9 @@ async function consultarSpeeroAPI() {
     const container = document.getElementById("speero-results-container");
     const notice = document.getElementById("speero-notice");
     const tbody = document.getElementById("tbody-speero");
+    const paginationEl = document.getElementById("speero-pagination");
 
-    badge.textContent = "Consultando Speero API...";
+    badge.textContent = `Consultando Pág. ${currentPage}...`;
     badge.className = "badge badge-warn";
     container.classList.remove("hidden");
     renderSkeletonRows("tbody-speero", 5, 3);
@@ -707,14 +720,22 @@ async function consultarSpeeroAPI() {
     );
 
     try {
-        const res = await apiFetch(`/api/productos/buscar-externo?q=${encodeURIComponent(q)}`);
+        const res = await apiFetch(
+            `/api/productos/buscar-externo?q=${encodeURIComponent(q)}&page=${currentPage}`
+        );
         const items = res.results || res.resultados || [];
+        const totalItems = Number(res.total || items.length);
+        const perPage = Number(res.perPage || 20);
+        const activePage = Number(res.page || currentPage);
+        const totalPages = Number(res.totalPages || Math.max(1, Math.ceil(totalItems / perPage)));
 
         if (res.api_online && items.length > 0) {
-            badge.textContent = `Speero API: ${res.total || items.length} encontrados`;
+            badge.textContent = `Speero API: ${totalItems} encontrados (Pág. ${activePage}/${totalPages})`;
             badge.className = "badge badge-ok";
             notice.className = "notice-banner";
-            notice.textContent = res.mensaje || `Mostrando ${items.length} de ${res.total || items.length} resultados para "${res.query || q}".`;
+            notice.textContent =
+                res.mensaje ||
+                `Mostrando ${items.length} de ${totalItems} resultados para "${res.query || q}" (Página ${activePage} de ${totalPages}).`;
             notice.classList.remove("hidden");
 
             tbody.innerHTML = items
@@ -724,13 +745,21 @@ async function consultarSpeeroAPI() {
                     const gradeBadgeClass = gradeText === "OEM" ? "badge-info" : "";
                     const inStock = item.inStock !== false;
                     const imgUrl = item.image || item.url_imagen || fallbackSvg;
-                    const priceAmount = item.price && typeof item.price === "object" ? item.price.amount : (item.precio_sugerido || 0);
-                    const priceCurrency = item.price && typeof item.price === "object" ? (item.price.currency || "SAR") : (item.moneda || "SAR");
-                    const displayName = item.name || item.nombre || oemCode;
+                    const priceAmount =
+                        item.price && typeof item.price === "object"
+                            ? item.price.amount
+                            : item.precio_sugerido || 0;
+                    const priceCurrency =
+                        item.price && typeof item.price === "object"
+                            ? item.price.currency || "SAR"
+                            : item.moneda || "SAR";
+                    const displayNameEs = item.name_es || item.name || item.nombre || oemCode;
+                    const originalName = item.name_original || "";
+
                     const safeItemJson = JSON.stringify({
                         oem: oemCode,
-                        name: displayName,
-                        nombre: `${displayName} [OEM: ${oemCode}]`,
+                        name: displayNameEs,
+                        nombre: `${displayNameEs} [OEM: ${oemCode}]`,
                         image: item.image || item.url_imagen || "",
                         url: item.url || "",
                         grade: item.grade || "aftermarket",
@@ -746,9 +775,21 @@ async function consultarSpeeroAPI() {
                         </td>
                         <td>
                             <div class="thumb-cell">
-                                <img src="${escapeHtml(imgUrl)}" alt="OEM ${escapeHtml(oemCode)}" class="product-thumb" onerror="this.src='${fallbackSvg}'" />
+                                <img
+                                    src="${escapeHtml(imgUrl)}"
+                                    alt="OEM ${escapeHtml(oemCode)}"
+                                    class="product-thumb"
+                                    data-zoom-src="${escapeHtml(imgUrl)}"
+                                    data-zoom-caption="${escapeHtml(displayNameEs)} — OEM: ${escapeHtml(oemCode)}"
+                                    onerror="this.src='${fallbackSvg}'"
+                                />
                                 <div>
-                                    <div style="font-weight:500;">${escapeHtml(displayName)}</div>
+                                    <div style="font-weight:500;">${escapeHtml(displayNameEs)}</div>
+                                    ${
+                                        originalName && originalName !== displayNameEs
+                                            ? `<div style="font-size:11px; color:var(--text-muted);">${escapeHtml(originalName)}</div>`
+                                            : ""
+                                    }
                                     ${
                                         item.url
                                             ? `<a href="${escapeHtml(item.url)}" target="_blank" rel="noopener noreferrer" class="mono" style="font-size:11px; color:var(--accent); text-decoration:none;">Ver ficha en Speero ↗</a>`
@@ -774,12 +815,15 @@ async function consultarSpeeroAPI() {
                 `;
                 })
                 .join("");
+
+            renderSpeeroPagination(activePage, totalPages, totalItems, perPage);
         } else {
             badge.textContent = "Modo Ingreso Manual Activo";
             badge.className = "badge badge-warn";
             notice.className = "notice-banner warn";
             notice.textContent = res.mensaje;
             notice.classList.remove("hidden");
+            if (paginationEl) paginationEl.classList.add("hidden");
 
             renderEmptyRow(
                 "tbody-speero",
@@ -795,8 +839,59 @@ async function consultarSpeeroAPI() {
     } catch (err) {
         badge.textContent = "Error de Conexión";
         badge.className = "badge badge-danger";
+        if (paginationEl) paginationEl.classList.add("hidden");
         notify(err.message, "error");
     }
+}
+
+function renderSpeeroPagination(activePage, totalPages, totalItems, perPage) {
+    const paginationEl = document.getElementById("speero-pagination");
+    if (!paginationEl) return;
+
+    if (totalPages <= 1) {
+        paginationEl.classList.add("hidden");
+        return;
+    }
+
+    const startItem = (activePage - 1) * perPage + 1;
+    const endItem = Math.min(totalItems, activePage * perPage);
+
+    // Calcular ventana de páginas (ej. 5 páginas visibles alrededor de la actual)
+    const maxButtons = 5;
+    let startPage = Math.max(1, activePage - 2);
+    let endPage = Math.min(totalPages, startPage + maxButtons - 1);
+    if (endPage - startPage + 1 < maxButtons) {
+        startPage = Math.max(1, endPage - maxButtons + 1);
+    }
+
+    let pageButtonsHtml = `
+        <button type="button" class="page-btn" ${activePage <= 1 ? "disabled" : ""} onclick="cambiarPaginaSpeero(1)" title="Primera página">«</button>
+        <button type="button" class="page-btn" ${activePage <= 1 ? "disabled" : ""} onclick="cambiarPaginaSpeero(${activePage - 1})" title="Página anterior">‹ Ant</button>
+    `;
+
+    for (let p = startPage; p <= endPage; p++) {
+        pageButtonsHtml += `
+            <button type="button" class="page-btn ${p === activePage ? "active" : ""}" onclick="cambiarPaginaSpeero(${p})">
+                ${p}
+            </button>
+        `;
+    }
+
+    pageButtonsHtml += `
+        <button type="button" class="page-btn" ${activePage >= totalPages ? "disabled" : ""} onclick="cambiarPaginaSpeero(${activePage + 1})" title="Página siguiente">Sig ›</button>
+        <button type="button" class="page-btn" ${activePage >= totalPages ? "disabled" : ""} onclick="cambiarPaginaSpeero(${totalPages})" title="Última página">»</button>
+    `;
+
+    paginationEl.innerHTML = `
+        <div class="pagination-info">
+            Mostrando artículos <strong class="mono">${startItem}–${endItem}</strong> de <strong class="mono">${totalItems}</strong>
+            (Página <strong class="mono">${activePage}</strong> de <strong class="mono">${totalPages}</strong>)
+        </div>
+        <div class="pagination-controls">
+            ${pageButtonsHtml}
+        </div>
+    `;
+    paginationEl.classList.remove("hidden");
 }
 
 window.seleccionarItemSpeero = function (item) {
@@ -1334,11 +1429,61 @@ document.addEventListener("DOMContentLoaded", () => {
     });
 
     // 5. Productos, Buscador Speero API y Conversión Imagen Base64
-    document.getElementById("btn-speero-search").addEventListener("click", consultarSpeeroAPI);
+    document.getElementById("btn-speero-search").addEventListener("click", () => consultarSpeeroAPI(1));
     document.getElementById("speero-query").addEventListener("keydown", (e) => {
         if (e.key === "Enter") {
             e.preventDefault();
-            consultarSpeeroAPI();
+            consultarSpeeroAPI(1);
+        }
+    });
+
+    // Tooltip flotante de ampliación de imagen al pasar el cursor sobre cualquier miniatura (.product-thumb)
+    const zoomTooltip = document.getElementById("img-zoom-tooltip");
+    const zoomTargetImg = document.getElementById("img-zoom-target");
+    const zoomCaption = document.getElementById("img-zoom-caption");
+
+    function positionZoomTooltip(clientX, clientY) {
+        if (!zoomTooltip || zoomTooltip.classList.contains("hidden")) return;
+        const offset = 16;
+        const tooltipWidth = 260;
+        const tooltipHeight = 270;
+        let left = clientX + offset;
+        let top = clientY + offset;
+
+        if (left + tooltipWidth > window.innerWidth - 12) {
+            left = clientX - tooltipWidth - offset;
+        }
+        if (top + tooltipHeight > window.innerHeight - 12) {
+            top = Math.max(12, window.innerHeight - tooltipHeight - 12);
+        }
+
+        zoomTooltip.style.left = `${left}px`;
+        zoomTooltip.style.top = `${top}px`;
+    }
+
+    document.addEventListener("mouseover", (e) => {
+        const thumb = e.target.closest(".product-thumb");
+        if (!thumb || !zoomTooltip) return;
+        const src = thumb.getAttribute("data-zoom-src") || thumb.getAttribute("src");
+        const caption = thumb.getAttribute("data-zoom-caption") || thumb.getAttribute("alt") || "";
+        if (!src) return;
+
+        zoomTargetImg.src = src;
+        zoomCaption.textContent = caption;
+        zoomTooltip.classList.remove("hidden");
+        positionZoomTooltip(e.clientX, e.clientY);
+    });
+
+    document.addEventListener("mousemove", (e) => {
+        if (zoomTooltip && !zoomTooltip.classList.contains("hidden")) {
+            positionZoomTooltip(e.clientX, e.clientY);
+        }
+    });
+
+    document.addEventListener("mouseout", (e) => {
+        const thumb = e.target.closest(".product-thumb");
+        if (thumb && zoomTooltip) {
+            zoomTooltip.classList.add("hidden");
         }
     });
 
