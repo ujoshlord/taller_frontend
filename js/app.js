@@ -8,7 +8,7 @@
 const DEFAULT_API_BASE_URL = "https://taller-mecanica.onrender.com";
 
 const state = {
-    apiBaseUrl: (localStorage.getItem("tp_api_url") || DEFAULT_API_BASE_URL).replace(/\/+$/, ""),
+    apiBaseUrl: DEFAULT_API_BASE_URL.replace(/\/+$/, ""),
     token: localStorage.getItem("tp_token") || null,
     user: null,
     activeModule: null,
@@ -1137,22 +1137,9 @@ window.editUsuario = function (idUsuario) {
 // EVENT LISTENERS E INICIALIZACIÓN
 // =============================================================================
 document.addEventListener("DOMContentLoaded", () => {
-    const apiInput = document.getElementById("login-api-url");
-    if (apiInput) {
-        apiInput.value = state.apiBaseUrl;
-        apiInput.addEventListener("change", () => {
-            state.apiBaseUrl = apiInput.value.trim().replace(/\/+$/, "");
-            localStorage.setItem("tp_api_url", state.apiBaseUrl);
-        });
-    }
-
     // 1. Login Form
     document.getElementById("login-form").addEventListener("submit", async (e) => {
         e.preventDefault();
-        if (apiInput) {
-            state.apiBaseUrl = apiInput.value.trim().replace(/\/+$/, "");
-            localStorage.setItem("tp_api_url", state.apiBaseUrl);
-        }
         const alias = document.getElementById("login-alias").value.trim();
         const contrasenia = document.getElementById("login-password").value;
         const btn = document.getElementById("login-submit-btn");
@@ -1174,15 +1161,6 @@ document.addEventListener("DOMContentLoaded", () => {
             btn.disabled = false;
             btn.textContent = "Iniciar Sesión";
         }
-    });
-
-    // Botones de acceso rápido por rol
-    document.querySelectorAll(".quick-role-btn").forEach((btn) => {
-        btn.addEventListener("click", () => {
-            document.getElementById("login-alias").value = btn.dataset.alias;
-            document.getElementById("login-password").value = btn.dataset.pass;
-            document.getElementById("login-form").requestSubmit();
-        });
     });
 
     // Logout
