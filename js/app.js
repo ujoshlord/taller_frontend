@@ -4,12 +4,11 @@
  * Buscador API Speero + Ingreso Manual (URL/Base64), Inventario, Despachos y Kardex/Facturación.
  */
 
-// Cuando despliegues el contenedor del backend en Render, puedes colocar aquí su URL fija
-// (ej. "https://taller-pro-api.onrender.com") o ingresarla directamente en la pantalla de Login.
-const DEFAULT_API_BASE_URL = "";
+// URL del contenedor Backend en Render
+const DEFAULT_API_BASE_URL = "https://taller-mecanica.onrender.com";
 
 const state = {
-    apiBaseUrl: (localStorage.getItem("tp_api_url") ?? DEFAULT_API_BASE_URL).replace(/\/+$/, ""),
+    apiBaseUrl: (localStorage.getItem("tp_api_url") || DEFAULT_API_BASE_URL).replace(/\/+$/, ""),
     token: localStorage.getItem("tp_token") || null,
     user: null,
     activeModule: null,
@@ -689,7 +688,7 @@ window.irASolicitarProducto = async function (idProducto) {
 async function consultarSpeeroAPI() {
     const q = document.getElementById("speero-query").value.trim();
     if (!q) {
-        notify("Ingresa el nombre o código del repuesto a buscar en Speero API.", "error");
+        notify("Ingresa el término de búsqueda para Speero API (ej. brake, filter).", "error");
         return;
     }
 
@@ -698,37 +697,82 @@ async function consultarSpeeroAPI() {
     const notice = document.getElementById("speero-notice");
     const tbody = document.getElementById("tbody-speero");
 
-    badge.textContent = "Consultando API...";
+    badge.textContent = "Consultando Speero API...";
     badge.className = "badge badge-warn";
     container.classList.remove("hidden");
-    renderSkeletonRows("tbody-speero", 4, 2);
+    renderSkeletonRows("tbody-speero", 5, 3);
+
+    const fallbackSvg = "data:image/svg+xml;utf8," + encodeURIComponent(
+        `<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#71717a" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>`
+    );
 
     try {
         const res = await apiFetch(`/api/productos/buscar-externo?q=${encodeURIComponent(q)}`);
-        if (res.api_online && res.resultados && res.resultados.length > 0) {
-            badge.textContent = "Speero API: Conectado";
+        const items = res.results || res.resultados || [];
+
+        if (res.api_online && items.length > 0) {
+            badge.textContent = `Speero API: ${res.total || items.length} encontrados`;
             badge.className = "badge badge-ok";
             notice.className = "notice-banner";
-            notice.textContent = res.mensaje;
+            notice.textContent = res.mensaje || `Mostrando ${items.length} de ${res.total || items.length} resultados para "${res.query || q}".`;
             notice.classList.remove("hidden");
 
-            tbody.innerHTML = res.resultados
-                .map(
-                    (item, idx) => `
+            tbody.innerHTML = items
+                .map((item) => {
+                    const oemCode = item.oem || item.sku || "S/N";
+                    const gradeText = (item.grade || "aftermarket").toUpperCase();
+                    const gradeBadgeClass = gradeText === "OEM" ? "badge-info" : "";
+                    const inStock = item.inStock !== false;
+                    const imgUrl = item.image || item.url_imagen || fallbackSvg;
+                    const priceAmount = item.price && typeof item.price === "object" ? item.price.amount : (item.precio_sugerido || 0);
+                    const priceCurrency = item.price && typeof item.price === "object" ? (item.price.currency || "SAR") : (item.moneda || "SAR");
+                    const displayName = item.name || item.nombre || oemCode;
+                    const safeItemJson = JSON.stringify({
+                        oem: oemCode,
+                        name: displayName,
+                        nombre: `${displayName} [OEM: ${oemCode}]`,
+                        image: item.image || item.url_imagen || "",
+                        url: item.url || "",
+                        grade: item.grade || "aftermarket",
+                        amount: Number(priceAmount) || 0,
+                        currency: priceCurrency,
+                    }).replace(/'/g, "&#39;");
+
+                    return `
                     <tr>
-                        <td class="mono">${escapeHtml(item.sku)}</td>
-                        <td style="font-weight:500;">${escapeHtml(item.nombre)}</td>
-                        <td class="mono">${formatMoney(item.precio_sugerido)}</td>
                         <td>
-                            <button type="button" class="btn btn-sm btn-primary" onclick='seleccionarItemSpeero(${JSON.stringify(
-                                item
-                            ).replace(/'/g, "&#39;")})'>
+                            <div class="mono" style="font-weight:600;">${escapeHtml(oemCode)}</div>
+                            <span class="badge ${gradeBadgeClass}" style="margin-top:3px; font-size:10px;">${escapeHtml(gradeText)}</span>
+                        </td>
+                        <td>
+                            <div class="thumb-cell">
+                                <img src="${escapeHtml(imgUrl)}" alt="OEM ${escapeHtml(oemCode)}" class="product-thumb" onerror="this.src='${fallbackSvg}'" />
+                                <div>
+                                    <div style="font-weight:500;">${escapeHtml(displayName)}</div>
+                                    ${
+                                        item.url
+                                            ? `<a href="${escapeHtml(item.url)}" target="_blank" rel="noopener noreferrer" class="mono" style="font-size:11px; color:var(--accent); text-decoration:none;">Ver ficha en Speero ↗</a>`
+                                            : `<span class="mono" style="font-size:11px; color:var(--text-muted);">OEM: ${escapeHtml(oemCode)}</span>`
+                                    }
+                                </div>
+                            </div>
+                        </td>
+                        <td>
+                            <span class="badge ${inStock ? "badge-ok" : "badge-danger"}">
+                                ${inStock ? "En Stock" : "Sin Stock"}
+                            </span>
+                        </td>
+                        <td class="mono" style="font-weight:600;">
+                            ${Number(priceAmount).toFixed(2)} ${escapeHtml(priceCurrency)}
+                        </td>
+                        <td>
+                            <button type="button" class="btn btn-sm btn-primary" onclick='seleccionarItemSpeero(${safeItemJson})'>
                                 Seleccionar para Comprar
                             </button>
                         </td>
                     </tr>
-                `
-                )
+                `;
+                })
                 .join("");
         } else {
             badge.textContent = "Modo Ingreso Manual Activo";
@@ -739,12 +783,11 @@ async function consultarSpeeroAPI() {
 
             renderEmptyRow(
                 "tbody-speero",
-                4,
+                5,
                 "API externa sin respuesta o sin coincidencias",
                 "Se ha prellenado el nombre buscado en el formulario inferior para que ingreses manualmente los datos y su imagen (URL o Base64)."
             );
 
-            // Prellenar automáticamente el término buscado en el formulario manual
             document.getElementById("compra-id-producto").value = "";
             document.getElementById("compra-nombre").value = q;
             document.getElementById("compra-costo").focus();
@@ -758,12 +801,12 @@ async function consultarSpeeroAPI() {
 
 window.seleccionarItemSpeero = function (item) {
     document.getElementById("compra-id-producto").value = "";
-    document.getElementById("compra-nombre").value = item.nombre || "";
-    document.getElementById("compra-url-imagen").value = item.url_imagen || "";
-    document.getElementById("compra-costo").value = item.precio_sugerido || 100;
+    document.getElementById("compra-nombre").value = item.nombre || `${item.name} [OEM: ${item.oem}]`;
+    document.getElementById("compra-url-imagen").value = item.image || item.url_imagen || "";
+    document.getElementById("compra-costo").value = item.amount || item.precio_sugerido || 100;
     updateCostoVentaPreview();
-    updateImagePreview(item.url_imagen || "");
-    notify("Datos del API cargados en el formulario de compra. Indica cantidad y confirma.", "success");
+    updateImagePreview(item.image || item.url_imagen || "");
+    notify(`Repuesto OEM ${item.oem || ""} cargado en el formulario de compra. Indica cantidad y confirma.`, "success");
 };
 
 function updateCostoVentaPreview() {
